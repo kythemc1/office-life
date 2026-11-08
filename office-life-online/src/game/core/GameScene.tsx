@@ -1,7 +1,8 @@
+
 import { SharedLobby } from '../world/SharedLobby';
 import { CharacterController } from '../character/CharacterController';
 import { InteractionManager } from '../interaction/InteractionManager';
-import { InteractionDemo } from '../interaction/InteractionDemo';
+import { ElevatorInteraction } from '../interaction/ElevatorInteraction';
 
 export function GameScene() {
   return (
@@ -29,8 +30,8 @@ export function GameScene() {
       {/* Interaction System */}
       <InteractionManager />
 
-      {/* Interaction Test Object */}
-      <InteractionDemo />
+      {/* Elevator */}
+      <ElevatorInteraction />
     </>
   );
 }
