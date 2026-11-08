@@ -11,6 +11,7 @@ import { Group, Vector3 } from 'three';
 
 import { KeyboardController } from '../controls/KeyboardController';
 import { ThirdPersonCamera } from '../camera/ThirdPersonCamera';
+import { interactionRuntime } from '../interaction/InteractionRuntime';
 
 const MODEL_PATH = new URL(
   '../../assets/characters/player/player.glb',
@@ -72,6 +73,17 @@ export function CharacterController({
     const collider = body.collider(0);
     if (!collider) return;
 
+    const currentPosition = body.translation();
+
+    // Update player position for interaction system every frame.
+    interactionRuntime.setPlayerPosition(
+      new Vector3(
+        currentPosition.x,
+        currentPosition.y,
+        currentPosition.z,
+      ),
+    );
+
     const input = keyboard.getInput();
 
     // Camera-relative movement
@@ -110,7 +122,6 @@ export function CharacterController({
     });
 
     const correctedMovement = controller.computedMovement();
-    const currentPosition = body.translation();
 
     // Apply corrected movement
     body.setNextKinematicTranslation({
