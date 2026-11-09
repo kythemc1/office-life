@@ -12,6 +12,7 @@ import {
   gameConnection,
   type RoomSnapshot,
 } from '../network/GameConnection';
+import { worldStore } from '../session/WorldStore';
 
 type ElevatorScreen = 'main' | 'create' | 'join' | 'role' | 'ready';
 type EntryMode = 'create' | 'join';
@@ -124,7 +125,9 @@ export function ElevatorInteraction() {
         if (mounted) {
           setConnectionStatus('Chưa kết nối được Backend');
           setError(
-            err instanceof Error ? err.message : 'Không thể kết nối Backend.',
+            err instanceof Error
+              ? err.message
+              : 'Không thể kết nối Backend.',
           );
         }
       }
@@ -173,7 +176,9 @@ export function ElevatorInteraction() {
       setOfficeRooms(rooms);
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : 'Không thể tải danh sách Office.',
+        err instanceof Error
+          ? err.message
+          : 'Không thể tải danh sách Office.',
       );
     } finally {
       setIsLoading(false);
@@ -181,7 +186,7 @@ export function ElevatorInteraction() {
   }, []);
 
   const confirmRole = useCallback(async () => {
-    if (!selectedRole) return;
+    if (!selectedRole || isLoading) return;
 
     setIsLoading(true);
     setError(null);
@@ -214,13 +219,26 @@ export function ElevatorInteraction() {
       setScreen('ready');
     } catch (err) {
       console.error('[Game] Office operation failed:', err);
+
       setError(
-        err instanceof Error ? err.message : 'Không thể vào Office Room.',
+        err instanceof Error
+          ? err.message
+          : 'Không thể vào Office Room.',
       );
     } finally {
       setIsLoading(false);
     }
-  }, [entryMode, selectedRole, selectedRoomId]);
+  }, [entryMode, selectedRole, selectedRoomId, isLoading]);
+
+  const enterOffice = useCallback(() => {
+    if (!currentRoom) {
+      setError('Không tìm thấy thông tin Office Room.');
+      return;
+    }
+
+    worldStore.enterOffice(currentRoom.roomId);
+    closeElevator();
+  }, [currentRoom, closeElevator]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -284,6 +302,7 @@ export function ElevatorInteraction() {
                   >
                     OFFICE LIFE ONLINE
                   </div>
+
                   <h2 style={{ margin: 0, fontSize: '25px' }}>
                     Elevator
                   </h2>
@@ -337,17 +356,41 @@ export function ElevatorInteraction() {
                     Bạn muốn làm gì?
                   </p>
 
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                    <button style={buttonStyle} onClick={openCreate}>
+                  <div
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '12px',
+                    }}
+                  >
+                    <button
+                      style={buttonStyle}
+                      onClick={openCreate}
+                    >
                       <div>Create Office</div>
-                      <div style={{ fontSize: '12px', fontWeight: 400, marginTop: '5px' }}>
+                      <div
+                        style={{
+                          fontSize: '12px',
+                          fontWeight: 400,
+                          marginTop: '5px',
+                        }}
+                      >
                         Tạo một văn phòng mới
                       </div>
                     </button>
 
-                    <button style={secondaryButtonStyle} onClick={() => void openJoin()}>
+                    <button
+                      style={secondaryButtonStyle}
+                      onClick={() => void openJoin()}
+                    >
                       <div>Join Office</div>
-                      <div style={{ fontSize: '12px', fontWeight: 400, marginTop: '5px' }}>
+                      <div
+                        style={{
+                          fontSize: '12px',
+                          fontWeight: 400,
+                          marginTop: '5px',
+                        }}
+                      >
                         Tham gia văn phòng đang hoạt động
                       </div>
                     </button>
@@ -358,16 +401,30 @@ export function ElevatorInteraction() {
               {screen === 'create' && (
                 <>
                   <h3 style={{ marginTop: 0 }}>Create Office</h3>
-                  <p style={{ color: '#cbd5e1', fontSize: '14px', lineHeight: 1.6 }}>
-                    Tạo một Office Room mới. Trước khi vào phòng, hãy chọn Role của bạn.
+
+                  <p
+                    style={{
+                      color: '#cbd5e1',
+                      fontSize: '14px',
+                      lineHeight: 1.6,
+                    }}
+                  >
+                    Tạo một Office Room mới. Trước khi vào phòng,
+                    hãy chọn Role của bạn.
                   </p>
 
-                  <button style={buttonStyle} onClick={() => setScreen('role')}>
+                  <button
+                    style={buttonStyle}
+                    onClick={() => setScreen('role')}
+                  >
                     Tiếp tục chọn Role
                   </button>
 
                   <button
-                    style={{ ...secondaryButtonStyle, marginTop: '12px' }}
+                    style={{
+                      ...secondaryButtonStyle,
+                      marginTop: '12px',
+                    }}
                     onClick={() => setScreen('main')}
                   >
                     Quay lại
@@ -380,9 +437,16 @@ export function ElevatorInteraction() {
                   <h3 style={{ marginTop: 0 }}>Join Office</h3>
 
                   {isLoading ? (
-                    <p style={{ color: '#cbd5e1' }}>Đang tải danh sách Office...</p>
+                    <p style={{ color: '#cbd5e1' }}>
+                      Đang tải danh sách Office...
+                    </p>
                   ) : officeRooms.length === 0 ? (
-                    <p style={{ color: '#cbd5e1', fontSize: '14px' }}>
+                    <p
+                      style={{
+                        color: '#cbd5e1',
+                        fontSize: '14px',
+                      }}
+                    >
                       Hiện chưa có Office Room nào đang hoạt động.
                     </p>
                   ) : (
@@ -395,23 +459,42 @@ export function ElevatorInteraction() {
                       }}
                     >
                       {officeRooms.map((room) => {
-                        const selected = selectedRoomId === room.roomId;
+                        const selected =
+                          selectedRoomId === room.roomId;
 
                         return (
                           <button
                             key={room.roomId}
-                            onClick={() => setSelectedRoomId(room.roomId)}
+                            onClick={() =>
+                              setSelectedRoomId(room.roomId)
+                            }
                             style={{
                               ...secondaryButtonStyle,
-                              border: selected ? '2px solid #3b82f6' : '2px solid transparent',
-                              background: selected ? '#263d60' : '#343a46',
+                              border: selected
+                                ? '2px solid #3b82f6'
+                                : '2px solid transparent',
+                              background: selected
+                                ? '#263d60'
+                                : '#343a46',
                             }}
                           >
-                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                            <div
+                              style={{
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                              }}
+                            >
                               <span>{room.name}</span>
                               <span>{selected ? '✓' : ''}</span>
                             </div>
-                            <div style={{ fontSize: '12px', fontWeight: 400, marginTop: '6px' }}>
+
+                            <div
+                              style={{
+                                fontSize: '12px',
+                                fontWeight: 400,
+                                marginTop: '6px',
+                              }}
+                            >
                               {room.playerCount} người chơi
                             </div>
                           </button>
@@ -436,7 +519,10 @@ export function ElevatorInteraction() {
                   </button>
 
                   <button
-                    style={{ ...secondaryButtonStyle, marginTop: '12px' }}
+                    style={{
+                      ...secondaryButtonStyle,
+                      marginTop: '12px',
+                    }}
                     onClick={() => setScreen('main')}
                   >
                     Quay lại
@@ -447,8 +533,16 @@ export function ElevatorInteraction() {
               {screen === 'role' && (
                 <>
                   <h3 style={{ marginTop: 0 }}>Choose Your Role</h3>
-                  <p style={{ color: '#cbd5e1', fontSize: '14px', lineHeight: 1.5 }}>
-                    Chọn vai trò của bạn trong Office Room. Role được giữ cố định trong phiên chơi.
+
+                  <p
+                    style={{
+                      color: '#cbd5e1',
+                      fontSize: '14px',
+                      lineHeight: 1.5,
+                    }}
+                  >
+                    Chọn vai trò của bạn trong Office Room.
+                    Role được giữ cố định trong phiên chơi.
                   </p>
 
                   <div
@@ -468,15 +562,36 @@ export function ElevatorInteraction() {
                           onClick={() => setSelectedRole(role.id)}
                           style={{
                             ...secondaryButtonStyle,
-                            border: selected ? '2px solid #3b82f6' : '2px solid transparent',
-                            background: selected ? '#263d60' : '#343a46',
+                            border: selected
+                              ? '2px solid #3b82f6'
+                              : '2px solid transparent',
+                            background: selected
+                              ? '#263d60'
+                              : '#343a46',
                           }}
                         >
-                          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <div
+                            style={{
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                            }}
+                          >
                             <span>{role.title}</span>
-                            {selected && <span style={{ color: '#60a5fa' }}>✓</span>}
+                            {selected && (
+                              <span style={{ color: '#60a5fa' }}>
+                                ✓
+                              </span>
+                            )}
                           </div>
-                          <div style={{ fontSize: '12px', fontWeight: 400, marginTop: '6px', lineHeight: 1.5 }}>
+
+                          <div
+                            style={{
+                              fontSize: '12px',
+                              fontWeight: 400,
+                              marginTop: '6px',
+                              lineHeight: 1.5,
+                            }}
+                          >
                             {role.description}
                           </div>
                         </button>
@@ -492,13 +607,22 @@ export function ElevatorInteraction() {
                     disabled={!selectedRole || isLoading}
                     onClick={() => void confirmRole()}
                   >
-                    {isLoading ? 'Đang xử lý...' : 'Xác nhận và vào Office'}
+                    {isLoading
+                      ? 'Đang xử lý...'
+                      : 'Xác nhận và vào Office'}
                   </button>
 
                   <button
-                    style={{ ...secondaryButtonStyle, marginTop: '12px' }}
+                    style={{
+                      ...secondaryButtonStyle,
+                      marginTop: '12px',
+                    }}
                     disabled={isLoading}
-                    onClick={() => setScreen(entryMode === 'create' ? 'create' : 'join')}
+                    onClick={() =>
+                      setScreen(
+                        entryMode === 'create' ? 'create' : 'join',
+                      )
+                    }
                   >
                     Quay lại
                   </button>
@@ -517,28 +641,61 @@ export function ElevatorInteraction() {
                       marginBottom: '18px',
                     }}
                   >
-                    <div style={{ color: '#94a3b8', fontSize: '12px', marginBottom: '8px' }}>
+                    <div
+                      style={{
+                        color: '#94a3b8',
+                        fontSize: '12px',
+                        marginBottom: '8px',
+                      }}
+                    >
                       OFFICE ROOM
                     </div>
-                    <div style={{ fontSize: '18px', fontWeight: 700 }}>
+
+                    <div
+                      style={{
+                        fontSize: '18px',
+                        fontWeight: 700,
+                      }}
+                    >
                       {currentRoom?.name}
                     </div>
 
-                    <div style={{ color: '#94a3b8', fontSize: '12px', marginTop: '16px' }}>
+                    <div
+                      style={{
+                        color: '#94a3b8',
+                        fontSize: '12px',
+                        marginTop: '16px',
+                      }}
+                    >
                       YOUR ROLE
                     </div>
-                    <div style={{ fontSize: '22px', fontWeight: 700 }}>
+
+                    <div
+                      style={{
+                        fontSize: '22px',
+                        fontWeight: 700,
+                      }}
+                    >
                       {selectedRole}
                     </div>
                   </div>
 
-                  <p style={{ color: '#cbd5e1', fontSize: '14px', lineHeight: 1.6 }}>
-                    Backend đã tạo hoặc xác nhận bạn tham gia Office Room.
-                    Việc chuyển cảnh sang bản đồ Office sẽ được triển khai ở bước tiếp theo.
+                  <p
+                    style={{
+                      color: '#cbd5e1',
+                      fontSize: '14px',
+                      lineHeight: 1.6,
+                    }}
+                  >
+                    Bạn đã tham gia Office Room thành công.
+                    Nhấn nút bên dưới để vào văn phòng.
                   </p>
 
-                  <button style={buttonStyle} onClick={closeElevator}>
-                    Hoàn tất
+                  <button
+                    style={buttonStyle}
+                    onClick={enterOffice}
+                  >
+                    Vào Office
                   </button>
                 </>
               )}

@@ -1,14 +1,25 @@
-
 import { SharedLobby } from '../world/SharedLobby';
 import { OfficeWorld } from '../world/OfficeWorld';
 import { CharacterController } from '../character/CharacterController';
 import { RemotePlayers } from '../character/RemotePlayers';
 import { InteractionManager } from '../interaction/InteractionManager';
 import { ElevatorInteraction } from '../interaction/ElevatorInteraction';
+import { OfficeInteractionTargets } from '../interaction/OfficeInteractionTargets';
+import { OfficeExit } from '../interaction/OfficeExit';
 import { useWorld } from '../session/WorldStore';
+
+// Shared Lobby giữ nguyên vị trí spawn hiện tại.
+const SHARED_LOBBY_SPAWN: [number, number, number] = [0, 0, 0];
+
+// Điểm spawn dự kiến tại lối đi Open Workspace.
+const OFFICE_SPAWN: [number, number, number] = [0, 0, -2];
 
 export function GameScene() {
   const { world } = useWorld();
+
+  const spawnPosition = world === 'SharedLobby'
+    ? SHARED_LOBBY_SPAWN
+    : OFFICE_SPAWN;
 
   return (
     <>
@@ -25,14 +36,23 @@ export function GameScene() {
       {world === 'SharedLobby' ? (
         <>
           <SharedLobby />
-          <InteractionManager />
           <ElevatorInteraction />
         </>
       ) : (
-        <OfficeWorld />
+        <>
+          <OfficeWorld />
+          <OfficeInteractionTargets />
+          <OfficeExit />
+        </>
       )}
 
-      <CharacterController />
+      <InteractionManager />
+
+      <CharacterController
+        key={world}
+        spawnPosition={spawnPosition}
+      />
+
       <RemotePlayers />
     </>
   );

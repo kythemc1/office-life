@@ -1,4 +1,3 @@
-
 import { useEffect, useMemo, useRef } from 'react';
 import { useGLTF } from '@react-three/drei';
 import { useFrame, useThree } from '@react-three/fiber';
@@ -23,13 +22,16 @@ const MODEL_PATH = new URL(
 interface CharacterControllerProps {
   speed?: number;
   runMultiplier?: number;
+  spawnPosition?: [number, number, number];
 }
 
 const POSITION_SYNC_INTERVAL = 1 / 15;
+const DEFAULT_SPAWN_POSITION: [number, number, number] = [0, 0, 0];
 
 export function CharacterController({
   speed = 4,
   runMultiplier = 2,
+  spawnPosition = DEFAULT_SPAWN_POSITION,
 }: CharacterControllerProps) {
   const bodyRef = useRef<RapierRigidBody | null>(null);
   const visualRef = useRef<Group>(null);
@@ -90,7 +92,6 @@ export function CharacterController({
 
     const safeDelta = Math.min(delta, 0.05);
 
-    // Synchronize local player position with other clients.
     positionSyncElapsed.current += safeDelta;
 
     if (positionSyncElapsed.current >= POSITION_SYNC_INTERVAL) {
@@ -108,7 +109,6 @@ export function CharacterController({
 
     const input = keyboard.getInput();
 
-    // Camera-relative movement
     camera.getWorldDirection(forward);
     forward.y = 0;
     forward.normalize();
@@ -171,7 +171,7 @@ export function CharacterController({
         ref={bodyRef}
         type="kinematicPosition"
         colliders={false}
-        position={[0, 0, 0]}
+        position={spawnPosition}
         enabledRotations={[false, false, false]}
       >
         <CapsuleCollider
