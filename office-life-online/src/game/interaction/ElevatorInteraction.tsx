@@ -4,11 +4,20 @@ import type { CSSProperties } from 'react';
 import { Html } from '@react-three/drei';
 
 import { InteractionTarget } from './InteractionTarget';
-import { playerSession, type PlayerRole } from '../session/PlayerSession';
+import {
+  playerSession,
+  type PlayerRole,
+} from '../session/PlayerSession';
+import {
+  gameConnection,
+  type RoomSnapshot,
+} from '../network/GameConnection';
 
 type ElevatorScreen = 'main' | 'create' | 'join' | 'role' | 'ready';
+type EntryMode = 'create' | 'join';
 
 const ELEVATOR_POSITION: [number, number, number] = [2, 0, 0];
+const DISPLAY_NAME = 'Player';
 
 const ROLES: {
   id: PlayerRole;
@@ -45,6 +54,8 @@ const overlayStyle: CSSProperties = {
 
 const panelStyle: CSSProperties = {
   width: 'min(460px, calc(100vw - 32px))',
+  maxHeight: '85vh',
+  overflowY: 'auto',
   padding: '28px',
   borderRadius: '16px',
   background: '#20242d',
@@ -71,14 +82,66 @@ const secondaryButtonStyle: CSSProperties = {
   background: '#343a46',
 };
 
+function toPlayerRoom(room: RoomSnapshot) {
+  return {
+    roomId: room.roomId,
+    name: room.name,
+    type:
+      room.type === 'Office'
+        ? 'Office' as const
+        : 'SharedLobby' as const,
+    playerCount: room.playerCount,
+  };
+}
+
 export function ElevatorInteraction() {
   const [isOpen, setIsOpen] = useState(false);
   const [screen, setScreen] = useState<ElevatorScreen>('main');
+  const [entryMode, setEntryMode] = useState<EntryMode>('create');
   const [selectedRole, setSelectedRole] = useState<PlayerRole | null>(null);
+  const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
+  const [officeRooms, setOfficeRooms] = useState<RoomSnapshot[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState('Đang kết nối...');
+  const [error, setError] = useState<string | null>(null);
+  const [currentRoom, setCurrentRoom] = useState<RoomSnapshot | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const connect = async () => {
+      try {
+        const room = await gameConnection.joinLobby(DISPLAY_NAME);
+
+        if (!mounted) return;
+
+        setCurrentRoom(room);
+        playerSession.setRoom(toPlayerRoom(room));
+        setConnectionStatus('Đã kết nối Shared Lobby');
+      } catch (err) {
+        console.error('[Game] Cannot connect to Lobby:', err);
+
+        if (mounted) {
+          setConnectionStatus('Chưa kết nối được Backend');
+          setError(
+            err instanceof Error ? err.message : 'Không thể kết nối Backend.',
+          );
+        }
+      }
+    };
+
+    void connect();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const openElevator = useCallback(() => {
     setScreen('main');
     setSelectedRole(null);
+    setSelectedRoomId(null);
+    setError(null);
     setIsOpen(true);
   }, []);
 
@@ -86,20 +149,84 @@ export function ElevatorInteraction() {
     setIsOpen(false);
     setScreen('main');
     setSelectedRole(null);
+    setSelectedRoomId(null);
+    setError(null);
   }, []);
 
-  const confirmRole = useCallback(() => {
+  const openCreate = useCallback(() => {
+    setEntryMode('create');
+    setSelectedRole(null);
+    setError(null);
+    setScreen('create');
+  }, []);
+
+  const openJoin = useCallback(async () => {
+    setEntryMode('join');
+    setSelectedRole(null);
+    setSelectedRoomId(null);
+    setError(null);
+    setIsLoading(true);
+    setScreen('join');
+
+    try {
+      const rooms = await gameConnection.getPublicOfficeRooms();
+      setOfficeRooms(rooms);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : 'Không thể tải danh sách Office.',
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  const confirmRole = useCallback(async () => {
     if (!selectedRole) return;
 
-    playerSession.setRole(selectedRole);
-    setScreen('ready');
-  }, [selectedRole]);
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      let room: RoomSnapshot;
+
+      if (entryMode === 'create') {
+        room = await gameConnection.createOffice(
+          DISPLAY_NAME,
+          selectedRole,
+        );
+      } else {
+        if (!selectedRoomId) {
+          setError('Vui lòng chọn một Office Room.');
+          return;
+        }
+
+        room = await gameConnection.joinOffice(
+          selectedRoomId,
+          DISPLAY_NAME,
+          selectedRole,
+        );
+      }
+
+      playerSession.setRole(selectedRole);
+      playerSession.setRoom(toPlayerRoom(room));
+
+      setCurrentRoom(room);
+      setScreen('ready');
+    } catch (err) {
+      console.error('[Game] Office operation failed:', err);
+      setError(
+        err instanceof Error ? err.message : 'Không thể vào Office Room.',
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  }, [entryMode, selectedRole, selectedRoomId]);
 
   useEffect(() => {
     if (!isOpen) return;
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
+      if (event.key === 'Escape' && !isLoading) {
         closeElevator();
       }
     };
@@ -109,7 +236,7 @@ export function ElevatorInteraction() {
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [isOpen, closeElevator]);
+  }, [isOpen, isLoading, closeElevator]);
 
   return (
     <>
@@ -119,7 +246,6 @@ export function ElevatorInteraction() {
         position={ELEVATOR_POSITION}
         onInteract={openElevator}
       >
-        {/* Temporary elevator interaction marker */}
         <mesh position={[0, 1, 0]} castShadow>
           <boxGeometry args={[0.5, 2, 0.2]} />
           <meshStandardMaterial color="#64748b" />
@@ -158,7 +284,6 @@ export function ElevatorInteraction() {
                   >
                     OFFICE LIFE ONLINE
                   </div>
-
                   <h2 style={{ margin: 0, fontSize: '25px' }}>
                     Elevator
                   </h2>
@@ -166,6 +291,7 @@ export function ElevatorInteraction() {
 
                 <button
                   onClick={closeElevator}
+                  disabled={isLoading}
                   aria-label="Close elevator"
                   style={{
                     border: 'none',
@@ -179,55 +305,49 @@ export function ElevatorInteraction() {
                 </button>
               </div>
 
+              <div
+                style={{
+                  fontSize: '12px',
+                  color: '#94a3b8',
+                  marginBottom: '16px',
+                }}
+              >
+                {connectionStatus}
+              </div>
+
+              {error && (
+                <div
+                  style={{
+                    padding: '12px',
+                    marginBottom: '16px',
+                    borderRadius: '8px',
+                    background: '#7f1d1d',
+                    color: '#fecaca',
+                    fontSize: '13px',
+                    lineHeight: 1.5,
+                  }}
+                >
+                  {error}
+                </div>
+              )}
+
               {screen === 'main' && (
                 <>
-                  <p
-                    style={{
-                      color: '#cbd5e1',
-                      fontSize: '14px',
-                      marginBottom: '24px',
-                    }}
-                  >
+                  <p style={{ color: '#cbd5e1', fontSize: '14px' }}>
                     Bạn muốn làm gì?
                   </p>
 
-                  <div
-                    style={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '12px',
-                    }}
-                  >
-                    <button
-                      style={buttonStyle}
-                      onClick={() => setScreen('create')}
-                    >
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    <button style={buttonStyle} onClick={openCreate}>
                       <div>Create Office</div>
-                      <div
-                        style={{
-                          fontSize: '12px',
-                          fontWeight: 400,
-                          marginTop: '5px',
-                          opacity: 0.8,
-                        }}
-                      >
+                      <div style={{ fontSize: '12px', fontWeight: 400, marginTop: '5px' }}>
                         Tạo một văn phòng mới
                       </div>
                     </button>
 
-                    <button
-                      style={secondaryButtonStyle}
-                      onClick={() => setScreen('join')}
-                    >
+                    <button style={secondaryButtonStyle} onClick={() => void openJoin()}>
                       <div>Join Office</div>
-                      <div
-                        style={{
-                          fontSize: '12px',
-                          fontWeight: 400,
-                          marginTop: '5px',
-                          opacity: 0.8,
-                        }}
-                      >
+                      <div style={{ fontSize: '12px', fontWeight: 400, marginTop: '5px' }}>
                         Tham gia văn phòng đang hoạt động
                       </div>
                     </button>
@@ -238,30 +358,85 @@ export function ElevatorInteraction() {
               {screen === 'create' && (
                 <>
                   <h3 style={{ marginTop: 0 }}>Create Office</h3>
-
-                  <p
-                    style={{
-                      color: '#cbd5e1',
-                      fontSize: '14px',
-                      lineHeight: 1.6,
-                    }}
-                  >
-                    Bạn đã chọn tạo một Office Room mới.
-                    Trước khi vào phòng, hãy chọn Role của bạn.
+                  <p style={{ color: '#cbd5e1', fontSize: '14px', lineHeight: 1.6 }}>
+                    Tạo một Office Room mới. Trước khi vào phòng, hãy chọn Role của bạn.
                   </p>
 
+                  <button style={buttonStyle} onClick={() => setScreen('role')}>
+                    Tiếp tục chọn Role
+                  </button>
+
                   <button
-                    style={buttonStyle}
-                    onClick={() => setScreen('role')}
+                    style={{ ...secondaryButtonStyle, marginTop: '12px' }}
+                    onClick={() => setScreen('main')}
+                  >
+                    Quay lại
+                  </button>
+                </>
+              )}
+
+              {screen === 'join' && (
+                <>
+                  <h3 style={{ marginTop: 0 }}>Join Office</h3>
+
+                  {isLoading ? (
+                    <p style={{ color: '#cbd5e1' }}>Đang tải danh sách Office...</p>
+                  ) : officeRooms.length === 0 ? (
+                    <p style={{ color: '#cbd5e1', fontSize: '14px' }}>
+                      Hiện chưa có Office Room nào đang hoạt động.
+                    </p>
+                  ) : (
+                    <div
+                      style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '10px',
+                        marginBottom: '18px',
+                      }}
+                    >
+                      {officeRooms.map((room) => {
+                        const selected = selectedRoomId === room.roomId;
+
+                        return (
+                          <button
+                            key={room.roomId}
+                            onClick={() => setSelectedRoomId(room.roomId)}
+                            style={{
+                              ...secondaryButtonStyle,
+                              border: selected ? '2px solid #3b82f6' : '2px solid transparent',
+                              background: selected ? '#263d60' : '#343a46',
+                            }}
+                          >
+                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                              <span>{room.name}</span>
+                              <span>{selected ? '✓' : ''}</span>
+                            </div>
+                            <div style={{ fontSize: '12px', fontWeight: 400, marginTop: '6px' }}>
+                              {room.playerCount} người chơi
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  <button
+                    style={{
+                      ...buttonStyle,
+                      opacity: selectedRoomId ? 1 : 0.5,
+                    }}
+                    disabled={!selectedRoomId || isLoading}
+                    onClick={() => {
+                      setEntryMode('join');
+                      setSelectedRole(null);
+                      setScreen('role');
+                    }}
                   >
                     Tiếp tục chọn Role
                   </button>
 
                   <button
-                    style={{
-                      ...secondaryButtonStyle,
-                      marginTop: '12px',
-                    }}
+                    style={{ ...secondaryButtonStyle, marginTop: '12px' }}
                     onClick={() => setScreen('main')}
                   >
                     Quay lại
@@ -272,16 +447,8 @@ export function ElevatorInteraction() {
               {screen === 'role' && (
                 <>
                   <h3 style={{ marginTop: 0 }}>Choose Your Role</h3>
-
-                  <p
-                    style={{
-                      color: '#cbd5e1',
-                      fontSize: '14px',
-                      lineHeight: 1.5,
-                    }}
-                  >
-                    Chọn vai trò của bạn trong Office Room.
-                    Role sẽ được giữ cố định trong suốt phiên chơi.
+                  <p style={{ color: '#cbd5e1', fontSize: '14px', lineHeight: 1.5 }}>
+                    Chọn vai trò của bạn trong Office Room. Role được giữ cố định trong phiên chơi.
                   </p>
 
                   <div
@@ -293,7 +460,7 @@ export function ElevatorInteraction() {
                     }}
                   >
                     {ROLES.map((role) => {
-                      const isSelected = selectedRole === role.id;
+                      const selected = selectedRole === role.id;
 
                       return (
                         <button
@@ -301,36 +468,15 @@ export function ElevatorInteraction() {
                           onClick={() => setSelectedRole(role.id)}
                           style={{
                             ...secondaryButtonStyle,
-                            border: isSelected
-                              ? '2px solid #3b82f6'
-                              : '2px solid transparent',
-                            background: isSelected
-                              ? '#263d60'
-                              : '#343a46',
+                            border: selected ? '2px solid #3b82f6' : '2px solid transparent',
+                            background: selected ? '#263d60' : '#343a46',
                           }}
                         >
-                          <div
-                            style={{
-                              display: 'flex',
-                              justifyContent: 'space-between',
-                              alignItems: 'center',
-                            }}
-                          >
+                          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                             <span>{role.title}</span>
-                            {isSelected && (
-                              <span style={{ color: '#60a5fa' }}>✓</span>
-                            )}
+                            {selected && <span style={{ color: '#60a5fa' }}>✓</span>}
                           </div>
-
-                          <div
-                            style={{
-                              fontSize: '12px',
-                              fontWeight: 400,
-                              marginTop: '6px',
-                              opacity: 0.8,
-                              lineHeight: 1.5,
-                            }}
-                          >
+                          <div style={{ fontSize: '12px', fontWeight: 400, marginTop: '6px', lineHeight: 1.5 }}>
                             {role.description}
                           </div>
                         </button>
@@ -341,63 +487,18 @@ export function ElevatorInteraction() {
                   <button
                     style={{
                       ...buttonStyle,
-                      opacity: selectedRole ? 1 : 0.5,
-                      cursor: selectedRole ? 'pointer' : 'not-allowed',
+                      opacity: selectedRole && !isLoading ? 1 : 0.5,
                     }}
-                    disabled={!selectedRole}
-                    onClick={confirmRole}
+                    disabled={!selectedRole || isLoading}
+                    onClick={() => void confirmRole()}
                   >
-                    Xác nhận Role
+                    {isLoading ? 'Đang xử lý...' : 'Xác nhận và vào Office'}
                   </button>
 
                   <button
-                    style={{
-                      ...secondaryButtonStyle,
-                      marginTop: '12px',
-                    }}
-                    onClick={() => setScreen('create')}
-                  >
-                    Quay lại
-                  </button>
-                </>
-              )}
-
-              {screen === 'join' && (
-                <>
-                  <h3 style={{ marginTop: 0 }}>Join Office</h3>
-
-                  <div
-                    style={{
-                      padding: '24px 16px',
-                      textAlign: 'center',
-                      background: '#343a46',
-                      borderRadius: '9px',
-                      marginBottom: '18px',
-                    }}
-                  >
-                    <div
-                      style={{
-                        fontSize: '14px',
-                        color: '#cbd5e1',
-                      }}
-                    >
-                      Danh sách Office hiện chưa khả dụng.
-                    </div>
-
-                    <div
-                      style={{
-                        fontSize: '12px',
-                        color: '#94a3b8',
-                        marginTop: '8px',
-                      }}
-                    >
-                      Sẽ được triển khai cùng hệ thống Multiplayer.
-                    </div>
-                  </div>
-
-                  <button
-                    style={buttonStyle}
-                    onClick={() => setScreen('main')}
+                    style={{ ...secondaryButtonStyle, marginTop: '12px' }}
+                    disabled={isLoading}
+                    onClick={() => setScreen(entryMode === 'create' ? 'create' : 'join')}
                   >
                     Quay lại
                   </button>
@@ -406,7 +507,7 @@ export function ElevatorInteraction() {
 
               {screen === 'ready' && (
                 <>
-                  <h3 style={{ marginTop: 0 }}>Role Selected</h3>
+                  <h3 style={{ marginTop: 0 }}>Office Joined</h3>
 
                   <div
                     style={{
@@ -416,42 +517,27 @@ export function ElevatorInteraction() {
                       marginBottom: '18px',
                     }}
                   >
-                    <div
-                      style={{
-                        color: '#94a3b8',
-                        fontSize: '12px',
-                        marginBottom: '8px',
-                      }}
-                    >
-                      YOUR ROLE
+                    <div style={{ color: '#94a3b8', fontSize: '12px', marginBottom: '8px' }}>
+                      OFFICE ROOM
+                    </div>
+                    <div style={{ fontSize: '18px', fontWeight: 700 }}>
+                      {currentRoom?.name}
                     </div>
 
-                    <div
-                      style={{
-                        fontSize: '22px',
-                        fontWeight: 700,
-                      }}
-                    >
+                    <div style={{ color: '#94a3b8', fontSize: '12px', marginTop: '16px' }}>
+                      YOUR ROLE
+                    </div>
+                    <div style={{ fontSize: '22px', fontWeight: 700 }}>
                       {selectedRole}
                     </div>
                   </div>
 
-                  <p
-                    style={{
-                      color: '#cbd5e1',
-                      fontSize: '14px',
-                      lineHeight: 1.6,
-                    }}
-                  >
-                    Role đã được lưu trong phiên chơi hiện tại.
-                    Chức năng tạo Office Room và chuyển cảnh sẽ được
-                    kết nối ở bước Multiplayer.
+                  <p style={{ color: '#cbd5e1', fontSize: '14px', lineHeight: 1.6 }}>
+                    Backend đã tạo hoặc xác nhận bạn tham gia Office Room.
+                    Việc chuyển cảnh sang bản đồ Office sẽ được triển khai ở bước tiếp theo.
                   </p>
 
-                  <button
-                    style={buttonStyle}
-                    onClick={closeElevator}
-                  >
+                  <button style={buttonStyle} onClick={closeElevator}>
                     Hoàn tất
                   </button>
                 </>

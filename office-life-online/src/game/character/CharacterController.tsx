@@ -1,3 +1,4 @@
+
 import { useEffect, useMemo, useRef } from 'react';
 import { useGLTF } from '@react-three/drei';
 import { useFrame, useThree } from '@react-three/fiber';
@@ -12,6 +13,7 @@ import { Group, Vector3 } from 'three';
 import { KeyboardController } from '../controls/KeyboardController';
 import { ThirdPersonCamera } from '../camera/ThirdPersonCamera';
 import { interactionRuntime } from '../interaction/InteractionRuntime';
+import { gameConnection } from '../network/GameConnection';
 
 const MODEL_PATH = new URL(
   '../../assets/characters/player/player.glb',
@@ -23,12 +25,15 @@ interface CharacterControllerProps {
   runMultiplier?: number;
 }
 
+const POSITION_SYNC_INTERVAL = 1 / 15;
+
 export function CharacterController({
   speed = 4,
   runMultiplier = 2,
 }: CharacterControllerProps) {
   const bodyRef = useRef<RapierRigidBody | null>(null);
   const visualRef = useRef<Group>(null);
+  const positionSyncElapsed = useRef(0);
 
   const { scene } = useGLTF(MODEL_PATH);
   const { camera } = useThree();
@@ -75,7 +80,6 @@ export function CharacterController({
 
     const currentPosition = body.translation();
 
-    // Update player position for interaction system every frame.
     interactionRuntime.setPlayerPosition(
       new Vector3(
         currentPosition.x,
@@ -83,6 +87,24 @@ export function CharacterController({
         currentPosition.z,
       ),
     );
+
+    const safeDelta = Math.min(delta, 0.05);
+
+    // Synchronize local player position with other clients.
+    positionSyncElapsed.current += safeDelta;
+
+    if (positionSyncElapsed.current >= POSITION_SYNC_INTERVAL) {
+      positionSyncElapsed.current %= POSITION_SYNC_INTERVAL;
+
+      void gameConnection.updatePosition(
+        currentPosition.x,
+        currentPosition.y,
+        currentPosition.z,
+        visual.rotation.y,
+      ).catch((error) => {
+        console.error('[Multiplayer] Position sync failed:', error);
+      });
+    }
 
     const input = keyboard.getInput();
 
@@ -108,13 +130,10 @@ export function CharacterController({
       ? speed * runMultiplier
       : speed;
 
-    const safeDelta = Math.min(delta, 0.05);
-
     const movement = direction.clone().multiplyScalar(
       currentSpeed * safeDelta,
     );
 
-    // Calculate collision-aware movement
     controller.computeColliderMovement(collider, {
       x: movement.x,
       y: 0,
@@ -123,14 +142,12 @@ export function CharacterController({
 
     const correctedMovement = controller.computedMovement();
 
-    // Apply corrected movement
     body.setNextKinematicTranslation({
       x: currentPosition.x + correctedMovement.x,
       y: currentPosition.y + correctedMovement.y,
       z: currentPosition.z + correctedMovement.z,
     });
 
-    // Rotate visual character
     const targetRotation = Math.atan2(
       direction.x,
       direction.z,

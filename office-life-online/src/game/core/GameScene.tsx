@@ -1,18 +1,19 @@
 
 import { SharedLobby } from '../world/SharedLobby';
+import { OfficeWorld } from '../world/OfficeWorld';
 import { CharacterController } from '../character/CharacterController';
+import { RemotePlayers } from '../character/RemotePlayers';
 import { InteractionManager } from '../interaction/InteractionManager';
 import { ElevatorInteraction } from '../interaction/ElevatorInteraction';
+import { useWorld } from '../session/WorldStore';
 
 export function GameScene() {
+  const { world } = useWorld();
+
   return (
     <>
-      {/* Sky */}
       <color attach="background" args={['#87ceeb']} />
-
-      {/* Lighting */}
       <ambientLight intensity={0.8} />
-
       <directionalLight
         position={[20, 30, 10]}
         intensity={1.5}
@@ -21,17 +22,18 @@ export function GameScene() {
         shadow-mapSize-height={2048}
       />
 
-      {/* Shared Lobby */}
-      <SharedLobby />
+      {world === 'SharedLobby' ? (
+        <>
+          <SharedLobby />
+          <InteractionManager />
+          <ElevatorInteraction />
+        </>
+      ) : (
+        <OfficeWorld />
+      )}
 
-      {/* Local Player */}
       <CharacterController />
-
-      {/* Interaction System */}
-      <InteractionManager />
-
-      {/* Elevator */}
-      <ElevatorInteraction />
+      <RemotePlayers />
     </>
   );
 }
