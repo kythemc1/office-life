@@ -1,89 +1,89 @@
-import { useSyncExternalStore } from 'react';
-
-export type QuestStatus =
-  | 'Pending'
-  | 'Accepted'
-  | 'Rejected'
-  | 'Completed'
-  | 'Failed';
-
-export type QuestScope = 'Individual' | 'Shared';
+export type QuestScope = "Individual" | "Shared";
+export type QuestStatus = "Pending" | "Accepted" | "Rejected" | "Completed" | "Failed";
+export type QuestSource = "System" | "TeamLeader" | "Director" | "ReceptionistNpc";
 
 export interface QuestDefinition {
-  id: string;
-  title: string;
-  description: string;
-  targetId: string;
-  durationSeconds: number;
-  rewardXp: number;
-  penaltyXp: number;
+    id: string;
+    title: string;
+    description: string;
+    targetId: string;
+    durationSeconds: number;
+    rewardXp: number;
+    penaltyXp: number;
 }
 
 export interface QuestParticipant {
-  connectionId: string;
-  status: QuestStatus;
-  acceptedAt: string | null;
-  deadlineAt: string | null;
-  completedAt: string | null;
+    connectionId: string;
+    status: QuestStatus;
+    acceptedAt: string | null;
+    deadlineAt: string | null;
+    completedAt: string | null;
 }
 
 export interface QuestAssignment {
-  assignmentId: string;
-  questId: string;
-  scope: QuestScope;
-  source: string;
-  roomId: string;
-  targetConnectionId: string | null;
-  assignedAt: string;
-  quest: QuestDefinition;
-  participants: QuestParticipant[];
+    assignmentId: string;
+    questId: string;
+    scope: QuestScope;
+    source: QuestSource;
+    roomId: string;
+    targetConnectionId: string | null;
+    assignedAt: string;
+    quest: QuestDefinition;
+    participants: QuestParticipant[];
 }
 
-interface QuestState {
-  assignments: QuestAssignment[];
+export interface QuestActionResult {
+    success: boolean;
+    message: string;
+    assignment: QuestAssignment | null;
 }
+
+type Listener = () => void;
 
 class QuestStore {
-  private state: QuestState = { assignments: [] };
-  private listeners = new Set<() => void>();
+    private assignments = new Map<string, QuestAssignment>();
+    private snapshot: QuestAssignment[] = [];
+    private listeners = new Set<Listener>();
 
-  subscribe = (listener: () => void) => {
-    this.listeners.add(listener);
-    return () => this.listeners.delete(listener);
-  };
+    subscribe = (listener: Listener) => {
+        this.listeners.add(listener);
+        return () => this.listeners.delete(listener);
+    };
 
-  getSnapshot = () => this.state;
+    getSnapshot = () => this.snapshot;
 
-  setAssignments(assignments: QuestAssignment[]) {
-    this.state = { assignments };
-    this.notify();
-  }
+    setAssignments(assignments: QuestAssignment[]) {
+        this.assignments.clear();
+        assignments.forEach(item => this.assignments.set(item.assignmentId, item));
+        this.updateSnapshot();
+        this.emit();
+    }
 
-  upsert(assignment: QuestAssignment) {
-    const assignments = this.state.assignments.filter(
-      item => item.assignmentId !== assignment.assignmentId,
-    );
+    upsert(assignment: QuestAssignment) {
+        this.assignments.set(assignment.assignmentId, assignment);
+        this.updateSnapshot();
+        this.emit();
+    }
 
-    this.state = { assignments: [...assignments, assignment] };
-    this.notify();
-  }
+    remove(assignmentId: string) {
+        this.assignments.delete(assignmentId);
+        this.updateSnapshot();
+        this.emit();
+    }
 
-  clear() {
-    this.state = { assignments: [] };
-    this.notify();
-  }
+    clear() {
+        this.assignments.clear();
+        this.updateSnapshot();
+        this.emit();
+    }
 
-  private notify() {
-    this.listeners.forEach(listener => listener());
-  }
+    private updateSnapshot() {
+        this.snapshot = Array.from(this.assignments.values());
+    }
+
+    private emit() {
+        this.listeners.forEach(listener => listener());
+    }
 }
 
 export const questStore = new QuestStore();
-
-export function useQuests() {
-  return useSyncExternalStore(
-    questStore.subscribe,
-    questStore.getSnapshot,
-    questStore.getSnapshot,
-  );
-}

@@ -26,12 +26,11 @@ interface CharacterControllerProps {
 }
 
 const POSITION_SYNC_INTERVAL = 1 / 15;
-const DEFAULT_SPAWN_POSITION: [number, number, number] = [0, 0, 0];
 
 export function CharacterController({
   speed = 4,
   runMultiplier = 2,
-  spawnPosition = DEFAULT_SPAWN_POSITION,
+  spawnPosition = [0, 0, 0],
 }: CharacterControllerProps) {
   const bodyRef = useRef<RapierRigidBody | null>(null);
   const visualRef = useRef<Group>(null);
@@ -89,11 +88,6 @@ export function CharacterController({
         currentPosition.z,
       ),
     );
-
-    if (interactionRuntime.isTaskOverlayActive()) {
-      body.setNextKinematicTranslation(currentPosition);
-      return;
-    }
 
     const safeDelta = Math.min(delta, 0.05);
 

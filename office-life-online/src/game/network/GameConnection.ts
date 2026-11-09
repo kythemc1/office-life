@@ -1,62 +1,48 @@
-
-import {
-  HubConnection,
-  HubConnectionBuilder,
-  HubConnectionState,
-  LogLevel,
-} from '@microsoft/signalr';
+import * as signalR from '@microsoft/signalr';
 
 import type { PlayerRole } from '../session/PlayerSession';
 import { multiplayerStore } from './MultiplayerStore';
-
-export interface PlayerInfo {
-  connectionId: string;
-  displayName: string;
-  role: string | null;
-  joinedAt: string;
-  x: number;
-  y: number;
-  z: number;
-  rotationY: number;
-}
-
-export interface RoomSnapshot {
-  roomId: string;
-  name: string;
-  type: string | number;
-  isPublic: boolean;
-  playerCount: number;
-  players: PlayerInfo[];
-}
-
-interface PlayerPositionUpdate {
-  connectionId: string;
-  x: number;
-  y: number;
-  z: number;
-  rotationY: number;
-}
+import {
+  type QuestActionResult,
+  type QuestAssignment,
+  questStore,
+} from '../quest/QuestStore';
 
 const HUB_URL =
-  import.meta.env.VITE_GAME_HUB_URL ??
-  'http://localhost:5012/hubs/game';
-
-function toBackendRole(role: PlayerRole): string {
-  return role === 'Team Leader' ? 'TeamLeader' : role;
-}
+  import.meta.env.VITE_GAME_HUB_URL ?? 'http://localhost:5012/hubs/game';
 
 class GameConnection {
-  private readonly connection: HubConnection;
-  private startPromise: Promise<void> | null = null;
+  private connection: signalR.HubConnection;
 
   constructor() {
-    this.connection = new HubConnectionBuilder()
+    this.connection = new signalR.HubConnectionBuilder()
       .withUrl(HUB_URL)
       .withAutomaticReconnect()
-      .configureLogging(LogLevel.Information)
       .build();
 
-    this.connection.on('PlayerJoined', (player: PlayerInfo) => {
+    this.registerEvents();
+
+    this.connection.onreconnected(async () => {
+      await this.joinLobby();
+    });
+  }
+
+  private registerEvents() {
+    this.connection.on(
+      'MyQuestsUpdated',
+      (assignments: QuestAssignment[]) => {
+        questStore.setAssignments(assignments);
+      },
+    );
+
+    this.connection.on(
+      'QuestAssignmentUpdated',
+      (assignment: QuestAssignment) => {
+        questStore.upsert(assignment);
+      },
+    );
+
+    this.connection.on('PlayerJoined', (player) => {
       multiplayerStore.addPlayer(player);
     });
 
@@ -64,109 +50,93 @@ class GameConnection {
       multiplayerStore.removePlayer(connectionId);
     });
 
-    this.connection.on('PlayerMoved', (position: PlayerPositionUpdate) => {
-      multiplayerStore.updatePosition(position);
+    this.connection.on('PlayerMoved', (position) => {
+      multiplayerStore.updatePlayerPosition(position);
     });
 
-    this.connection.onreconnected(async () => {
-      try {
-        const room = await this.joinLobby();
-        console.info(
-          '[SignalR] Reconnected and joined Shared Lobby:',
-          room.roomId,
-        );
-      } catch (error) {
-        console.error('[SignalR] Failed to rejoin Lobby:', error);
-      }
+    this.connection.on('RoomJoined', (room) => {
+      multiplayerStore.setRoom(
+        room,
+        this.connection.connectionId ?? null,
+      );
     });
 
-    this.connection.onclose((error) => {
-      multiplayerStore.clear();
-
-      if (error) {
-        console.error('[SignalR] Connection closed:', error);
-      }
+    this.connection.on('OfficeRoomClosed', (roomId: string) => {
+      multiplayerStore.removeRoom(roomId);
     });
   }
 
-  getConnectionId(): string | null {
-    return this.connection.connectionId ?? null;
-  }
-
-  async connect(): Promise<void> {
-    if (this.connection.state === HubConnectionState.Connected) {
-      return;
+  async connect() {
+    if (this.connection.state === signalR.HubConnectionState.Disconnected) {
+      await this.connection.start();
     }
-
-    if (this.startPromise) {
-      return this.startPromise;
-    }
-
-    this.startPromise = this.connection
-      .start()
-      .then(() => {
-        console.info('[SignalR] Connected:', HUB_URL);
-      })
-      .finally(() => {
-        this.startPromise = null;
-      });
-
-    return this.startPromise;
   }
 
-  async joinLobby(displayName = 'Player'): Promise<RoomSnapshot> {
+  private normalizeRole(role: PlayerRole): string {
+    return String(role).replace(/\s+/g, '');
+  }
+
+  async joinLobby(displayName?: string) {
     await this.connect();
 
-    const room = await this.connection.invoke<RoomSnapshot>(
+    const room = await this.connection.invoke(
       'JoinLobby',
       displayName,
     );
 
-    multiplayerStore.setRoom(room, this.getConnectionId());
+    multiplayerStore.setRoom(
+      room,
+      this.connection.connectionId ?? null,
+    );
 
     return room;
   }
 
-  async createOffice(
-    displayName: string,
-    role: PlayerRole,
-  ): Promise<RoomSnapshot> {
-    await this.ensureConnected();
+  async createOffice(displayName: string, role: PlayerRole) {
+    await this.connect();
 
-    const room = await this.connection.invoke<RoomSnapshot>(
+    const room = await this.connection.invoke(
       'CreateOffice',
       displayName,
-      toBackendRole(role),
+      this.normalizeRole(role),
     );
 
-    multiplayerStore.setRoom(room, this.getConnectionId());
+    multiplayerStore.setRoom(
+      room,
+      this.connection.connectionId ?? null,
+    );
+
+    await this.getMyQuests();
 
     return room;
   }
 
-  async getPublicOfficeRooms(): Promise<RoomSnapshot[]> {
-    await this.ensureConnected();
+  async getPublicOfficeRooms() {
+    await this.connect();
 
-    return this.connection.invoke<RoomSnapshot[]>(
-      'GetPublicOfficeRooms',
-    );
+    return this.connection.invoke('GetPublicOfficeRooms');
   }
 
   async joinOffice(
     roomId: string,
     displayName: string,
     role: PlayerRole,
-  ): Promise<RoomSnapshot> {
-    await this.ensureConnected();
+  ) {
+    await this.connect();
 
-    const room = await this.connection.invoke<RoomSnapshot>(
+    const room = await this.connection.invoke(
       'JoinOffice',
       roomId,
       displayName,
-      toBackendRole(role),
+      this.normalizeRole(role),
     );
 
-    multiplayerStore.setRoom(room, this.getConnectionId());
+    multiplayerStore.setRoom(
+      room,
+      this.connection.connectionId ?? null,
+    );
+
+    await this.getMyQuests();
 
     return room;
   }
@@ -176,12 +146,14 @@ class GameConnection {
     y: number,
     z: number,
     rotationY: number,
-  ): Promise<void> {
-    if (this.connection.state !== HubConnectionState.Connected) {
+  ) {
+    if (
+      this.connection.state !== signalR.HubConnectionState.Connected
+    ) {
       return;
     }
 
-    await this.connection.send(
+    await this.connection.invoke(
       'UpdatePosition',
       x,
       y,
@@ -190,19 +162,74 @@ class GameConnection {
     );
   }
 
-  async leaveRoom(): Promise<void> {
-    if (this.connection.state !== HubConnectionState.Connected) {
+  async leaveRoom() {
+    if (
+      this.connection.state !== signalR.HubConnectionState.Connected
+    ) {
       return;
     }
 
     await this.connection.invoke('LeaveRoom');
+
     multiplayerStore.clear();
+    questStore.clear();
   }
 
-  private async ensureConnected(): Promise<void> {
-    if (this.connection.state !== HubConnectionState.Connected) {
-      throw new Error('SignalR chưa kết nối. Vui lòng thử lại.');
+  async getMyQuests(): Promise<QuestAssignment[]> {
+    await this.connect();
+
+    const assignments = await this.connection.invoke<QuestAssignment[]>(
+      'GetMyQuests',
+    );
+
+    questStore.setAssignments(assignments);
+
+    return assignments;
+  }
+
+  async acceptQuest(
+    assignmentId: string,
+  ): Promise<QuestActionResult> {
+    const result = await this.connection.invoke<QuestActionResult>(
+      'AcceptQuest',
+      assignmentId,
+    );
+
+    if (result.assignment) {
+      questStore.upsert(result.assignment);
     }
+
+    return result;
+  }
+
+  async rejectQuest(
+    assignmentId: string,
+  ): Promise<QuestActionResult> {
+    const result = await this.connection.invoke<QuestActionResult>(
+      'RejectQuest',
+      assignmentId,
+    );
+
+    if (result.assignment) {
+      questStore.upsert(result.assignment);
+    }
+
+    return result;
+  }
+
+  async completeQuest(
+    targetId: string,
+  ): Promise<QuestActionResult> {
+    const result = await this.connection.invoke<QuestActionResult>(
+      'CompleteQuest',
+      targetId,
+    );
+
+    if (result.assignment) {
+      questStore.upsert(result.assignment);
+    }
+
+    return result;
   }
 }
 

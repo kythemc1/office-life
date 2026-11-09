@@ -10,9 +10,9 @@ import {
 } from '../session/PlayerSession';
 import {
   gameConnection,
-  type RoomSnapshot,
 } from '../network/GameConnection';
 import { worldStore } from '../session/WorldStore';
+import type { RoomSnapshot } from '../network/MultiplayerStore';
 
 type ElevatorScreen = 'main' | 'create' | 'join' | 'role' | 'ready';
 type EntryMode = 'create' | 'join';

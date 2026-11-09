@@ -1,4 +1,5 @@
 import { useCallback } from 'react';
+
 import { InteractionTarget } from './InteractionTarget';
 
 interface OfficeTask {
@@ -38,7 +39,9 @@ const TASKS: Record<string, OfficeTask> = {
 export function OfficeInteractionTargets() {
   const openTask = useCallback((task: OfficeTask) => {
     window.dispatchEvent(
-      new CustomEvent('office-task-open', { detail: task }),
+      new CustomEvent('office-task-open', {
+        detail: task,
+      }),
     );
   }, []);
 

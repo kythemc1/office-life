@@ -13,3 +13,94 @@ body,
   height: 100%;
   overflow: hidden;
 }
+
+.game-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.game-canvas {
+  position: absolute;
+  inset: 0;
+}
+
+.game-ui {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 16px;
+  pointer-events: none;
+}
+
+.quest-panel,
+.office-interaction-targets {
+  pointer-events: auto;
+  color: #f8fafc;
+  background: rgba(15, 23, 42, 0.9);
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 10px;
+  padding: 14px 16px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+}
+
+.quest-panel h3 {
+  margin-bottom: 6px;
+  color: #fff;
+  font-size: 18px;
+}
+
+.office-interaction-targets {
+  display: flex;
+  gap: 8px;
+}
+
+.quest-panel button,
+.office-interaction-targets button,
+.quest-result-overlay button {
+  border: 0;
+  border-radius: 6px;
+  padding: 8px 12px;
+  color: #fff;
+  background: #2563eb;
+  cursor: pointer;
+}
+
+.quest-panel button + button {
+  margin-left: 8px;
+  background: #475569;
+}
+
+.quest-panel .quest-actions {
+  margin-top: 12px;
+}
+
+.office-interaction-targets {
+  align-self: flex-start;
+}
+
+.quest-result-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.45);
+  pointer-events: auto;
+}
+
+.quest-result-content {
+  display: grid;
+  gap: 12px;
+  min-width: 240px;
+  padding: 20px;
+  color: #f8fafc;
+  background: #0f172a;
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  border-radius: 10px;
+}

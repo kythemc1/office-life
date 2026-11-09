@@ -1,7 +1,6 @@
-
 import { useSyncExternalStore } from 'react';
 
-interface PlayerInfo {
+export interface PlayerInfo {
   connectionId: string;
   x: number;
   y: number;
@@ -10,9 +9,10 @@ interface PlayerInfo {
   [key: string]: any;
 }
 
-interface RoomSnapshot {
+export interface RoomSnapshot {
   roomId: string;
   players: PlayerInfo[];
+  [key: string]: any;
 }
 
 export interface RemotePlayerPosition {
@@ -48,7 +48,13 @@ class MultiplayerStore {
 
   getSnapshot = (): MultiplayerState => this.state;
 
-  setRoom(room: RoomSnapshot, localConnectionId: string | null): void {
+  getLocalConnectionId = (): string | null =>
+    this.state.localConnectionId;
+
+  setRoom(
+    room: RoomSnapshot,
+    localConnectionId: string | null = null,
+  ): void {
     this.state = {
       roomId: room.roomId,
       localConnectionId,
@@ -78,17 +84,39 @@ class MultiplayerStore {
   }
 
   removePlayer(connectionId: string): void {
+    const players = this.state.players.filter(
+      player => player.connectionId !== connectionId,
+    );
+
+    if (players.length === this.state.players.length) {
+      return;
+    }
+
     this.state = {
       ...this.state,
-      players: this.state.players.filter(
-        player => player.connectionId !== connectionId,
-      ),
+      players,
     };
 
     this.notify();
   }
 
+  updatePlayerPosition(position: RemotePlayerPosition): void {
+    this.updatePosition(position);
+  }
+
   updatePosition(position: RemotePlayerPosition): void {
+    if (position.connectionId === this.state.localConnectionId) {
+      return;
+    }
+
+    const playerExists = this.state.players.some(
+      player => player.connectionId === position.connectionId,
+    );
+
+    if (!playerExists) {
+      return;
+    }
+
     this.state = {
       ...this.state,
       players: this.state.players.map(player =>
@@ -105,6 +133,14 @@ class MultiplayerStore {
     };
 
     this.notify();
+  }
+
+  removeRoom(roomId: string): void {
+    if (this.state.roomId !== roomId) {
+      return;
+    }
+
+    this.clear();
   }
 
   clear(): void {
