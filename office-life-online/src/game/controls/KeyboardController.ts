@@ -10,8 +10,17 @@ export class KeyboardController {
   private keys = new Set<string>();
   private connected = false;
 
+  private readonly movementKeys = [
+    'KeyW',
+    'KeyA',
+    'KeyS',
+    'KeyD',
+    'ShiftLeft',
+    'ShiftRight',
+  ];
+
   private handleKeyDown = (event: KeyboardEvent) => {
-    if (['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ShiftLeft', 'ShiftRight'].includes(event.code)) {
+    if (this.movementKeys.includes(event.code)) {
       event.preventDefault();
       this.keys.add(event.code);
     }
@@ -22,7 +31,7 @@ export class KeyboardController {
   };
 
   private handleBlur = () => {
-    this.keys.clear();
+    this.clear();
   };
 
   connect() {
@@ -45,6 +54,10 @@ export class KeyboardController {
     };
   }
 
+  clear() {
+    this.keys.clear();
+  }
+
   dispose() {
     if (!this.connected) return;
 
@@ -52,7 +65,7 @@ export class KeyboardController {
     window.removeEventListener('keyup', this.handleKeyUp);
     window.removeEventListener('blur', this.handleBlur);
 
-    this.keys.clear();
+    this.clear();
     this.connected = false;
   }
 }

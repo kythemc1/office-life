@@ -11,10 +11,16 @@ const PROMPT_HEIGHT = 1.5;
 export function InteractionManager() {
   const [activeInteraction, setActiveInteraction] =
     useState<ActiveInteraction | null>(null);
+
   const activeInteractionRef = useRef<ActiveInteraction | null>(null);
 
   useFrame(() => {
-    const nearest = interactionRuntime.getNearestTarget(INTERACTION_DISTANCE);
+    const previous = activeInteractionRef.current;
+
+    const nearest = interactionRuntime.getNearestTarget(
+      INTERACTION_DISTANCE,
+    );
+
     const next: ActiveInteraction | null = nearest
       ? {
           id: nearest.target.id,
@@ -24,25 +30,34 @@ export function InteractionManager() {
         }
       : null;
 
-    // Always keep the latest distance/position for the E-key handler,
-    // but only rerender React when the visible target changes.
-    activeInteractionRef.current = next;
-
-    const current = activeInteraction;
-    if (current?.id !== next?.id || current?.label !== next?.label) {
+    if (
+      previous?.id !== next?.id ||
+      previous?.label !== next?.label
+    ) {
       setActiveInteraction(next);
     }
+
+    activeInteractionRef.current = next;
   });
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.code !== 'KeyE' || event.repeat) return;
+      if (
+        event.code !== 'KeyE' ||
+        event.repeat ||
+        interactionRuntime.isTaskOverlayActive()
+      ) {
+        return;
+      }
 
       const target = event.target;
+
       if (
         target instanceof HTMLElement &&
-        (target.isContentEditable ||
-          ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))
+        (
+          target.isContentEditable ||
+          ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)
+        )
       ) {
         return;
       }
@@ -50,11 +65,17 @@ export function InteractionManager() {
       const active = activeInteractionRef.current;
       if (!active) return;
 
-      interactionRuntime.interact(active.id, INTERACTION_DISTANCE);
+      interactionRuntime.interact(
+        active.id,
+        INTERACTION_DISTANCE,
+      );
     };
 
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
   }, []);
 
   if (!activeInteraction) return null;

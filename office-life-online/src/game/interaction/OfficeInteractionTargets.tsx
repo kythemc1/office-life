@@ -1,50 +1,86 @@
 import { useCallback } from 'react';
 import { InteractionTarget } from './InteractionTarget';
 
-/**
- * Interaction points are positioned near the corresponding GLB objects.
- * These callbacks intentionally contain no gameplay/business logic yet.
- */
+interface OfficeTask {
+  id: string;
+  title: string;
+  description: string;
+}
+
+const TASKS: Record<string, OfficeTask> = {
+  coffee: {
+    id: 'coffee',
+    title: 'Pha nước',
+    description: 'Đang chuẩn bị cà phê...',
+  },
+  water: {
+    id: 'water',
+    title: 'Lấy nước',
+    description: 'Đang lấy nước...',
+  },
+  vending: {
+    id: 'vending',
+    title: 'Mua đồ',
+    description: 'Đang mua đồ...',
+  },
+  fridge: {
+    id: 'fridge',
+    title: 'Lấy đồ',
+    description: 'Đang lấy đồ từ tủ lạnh...',
+  },
+  printer: {
+    id: 'printer',
+    title: 'In tài liệu',
+    description: 'Máy in đang xử lý tài liệu...',
+  },
+};
+
 export function OfficeInteractionTargets() {
-  const handlePlaceholder = useCallback((label: string) => {
-    console.info(`[Office Interaction] ${label}: interaction triggered`);
+  const openTask = useCallback((task: OfficeTask) => {
+    window.dispatchEvent(
+      new CustomEvent('office-task-open', { detail: task }),
+    );
   }, []);
 
   return (
     <>
       <InteractionTarget
         id="office-coffee-machine"
-        label="Lấy cà phê"
+        label="Pha nước"
         position={[-8.3, 0, -4.35]}
-        onInteract={() => handlePlaceholder('Coffee machine')}
+        onInteract={() => openTask(TASKS.coffee)}
         children={null}
       />
+
       <InteractionTarget
         id="office-water-cooler"
         label="Lấy nước"
         position={[-8.6, 0, -1.55]}
-        onInteract={() => handlePlaceholder('Water cooler')}
+        onInteract={() => openTask(TASKS.water)}
         children={null}
       />
+
       <InteractionTarget
         id="office-vending-machine"
-        label="Máy bán hàng"
+        label="Mua đồ"
         position={[-7.35, 0, -3.6]}
-        onInteract={() => handlePlaceholder('Vending machine')}
+        onInteract={() => openTask(TASKS.vending)}
         children={null}
       />
+
       <InteractionTarget
         id="office-fridge"
-        label="Mở tủ lạnh"
+        label="Lấy đồ"
         position={[-5.7, 0, -4.45]}
-        onInteract={() => handlePlaceholder('Fridge')}
+        onInteract={() => openTask(TASKS.fridge)}
         children={null}
       />
+
       <InteractionTarget
         id="office-printer"
-        label="Sử dụng máy in"
+        label="In tài liệu"
         position={[8.4, 0, 1.35]}
-        onInteract={() => handlePlaceholder('Printer')}
+        onInteract={() => openTask(TASKS.printer)}
         children={null}
       />
     </>

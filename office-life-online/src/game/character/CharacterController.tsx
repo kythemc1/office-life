@@ -90,6 +90,11 @@ export function CharacterController({
       ),
     );
 
+    if (interactionRuntime.isTaskOverlayActive()) {
+      body.setNextKinematicTranslation(currentPosition);
+      return;
+    }
+
     const safeDelta = Math.min(delta, 0.05);
 
     positionSyncElapsed.current += safeDelta;
