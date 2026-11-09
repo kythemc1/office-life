@@ -30,6 +30,8 @@ export interface QuestAssignment {
     assignedAt: string;
     quest: QuestDefinition;
     participants: QuestParticipant[];
+    sharedCompletedCount: number;
+    sharedParticipantCount: number;
 }
 
 export interface QuestActionResult {

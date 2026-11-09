@@ -88,6 +88,7 @@ class GameConnection {
       room,
       this.connection.connectionId ?? null,
     );
+    questStore.clear();
 
     return room;
   }
